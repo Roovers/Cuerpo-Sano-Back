@@ -6,9 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -22,14 +23,20 @@ public class FotoStorageService {
             Pattern.DOTALL
     );
 
-    private final Path fotosDirectory;
+    private final HttpClient httpClient;
+    private final String supabaseUrl;
+    private final String supabaseServiceRoleKey;
+    private final String bucket;
 
     public FotoStorageService(
-            @Value("${app.fotos.dir:uploads/fotos}") String fotosDir
+            @Value("${app.supabase.url:}") String supabaseUrl,
+            @Value("${app.supabase.service-role-key:}") String supabaseServiceRoleKey,
+            @Value("${app.supabase.bucket:fotos}") String bucket
     ) {
-        this.fotosDirectory = Paths.get(fotosDir)
-                .toAbsolutePath()
-                .normalize();
+        this.httpClient = HttpClient.newHttpClient();
+        this.supabaseUrl = limpiarBarraFinal(supabaseUrl);
+        this.supabaseServiceRoleKey = supabaseServiceRoleKey;
+        this.bucket = bucket;
     }
 
     public String guardarFoto(String fotoBase64, String prefijoArchivo) {
@@ -49,27 +56,21 @@ public class FotoStorageService {
             return valor;
         }
 
+        validarConfiguracionSupabase();
+
         FotoDecodificada foto = decodificarFoto(valor);
 
-        try {
-            Files.createDirectories(fotosDirectory);
+        String nombreSeguro = limpiarPrefijo(prefijoArchivo);
+        String nombreArchivo = nombreSeguro + "_" +
+                UUID.randomUUID().toString().replace("-", "") +
+                "." + foto.extension();
 
-            String nombreSeguro = limpiarPrefijo(prefijoArchivo);
-            String nombreArchivo = nombreSeguro + "_" +
-                    UUID.randomUUID().toString().replace("-", "") +
-                    "." + foto.extension();
+        String carpeta = nombreSeguro.startsWith("entrenador") ? "entrenadores" : "socios";
+        String rutaStorage = carpeta + "/" + nombreArchivo;
 
-            Path destino = fotosDirectory.resolve(nombreArchivo).normalize();
+        subirASupabaseStorage(rutaStorage, foto.bytes(), foto.mimeType());
 
-            Files.write(destino, foto.bytes());
-
-            return "/fotos/" + nombreArchivo;
-        } catch (IOException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "No se pudo guardar la foto"
-            );
-        }
+        return supabaseUrl + "/storage/v1/object/public/" + bucket + "/" + rutaStorage;
     }
 
     public String normalizarFotoParaRespuesta(String fotoUrl) {
@@ -94,6 +95,57 @@ public class FotoStorageService {
 
         return "data:" + foto.mimeType() + ";base64," +
                 Base64.getEncoder().encodeToString(foto.bytes());
+    }
+
+    private void subirASupabaseStorage(String rutaStorage, byte[] bytes, String mimeType) {
+        String endpoint = supabaseUrl + "/storage/v1/object/" + bucket + "/" + rutaStorage;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .header("Authorization", "Bearer " + supabaseServiceRoleKey)
+                .header("apikey", supabaseServiceRoleKey)
+                .header("Content-Type", mimeType)
+                .header("Cache-Control", "3600")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(bytes))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "No se pudo subir la foto a Supabase Storage: " + response.body()
+                );
+            }
+        } catch (IOException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "No se pudo conectar con Supabase Storage"
+            );
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Se interrumpió la subida de la foto a Supabase Storage"
+            );
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "La URL de Supabase Storage no es válida"
+            );
+        }
+    }
+
+    private void validarConfiguracionSupabase() {
+        if (supabaseUrl == null || supabaseUrl.isBlank() ||
+                supabaseServiceRoleKey == null || supabaseServiceRoleKey.isBlank() ||
+                bucket == null || bucket.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Falta configurar Supabase Storage en el backend"
+            );
+        }
     }
 
     private FotoDecodificada decodificarFoto(String valorOriginal) {
@@ -182,6 +234,14 @@ public class FotoStorageService {
                 .replaceAll("[^a-z0-9_-]", "_")
                 .replaceAll("_+", "_")
                 .replaceAll("^_|_$", "");
+    }
+
+    private String limpiarBarraFinal(String valor) {
+        if (valor == null) {
+            return "";
+        }
+
+        return valor.trim().replaceAll("/+$", "");
     }
 
     private record FotoDecodificada(
