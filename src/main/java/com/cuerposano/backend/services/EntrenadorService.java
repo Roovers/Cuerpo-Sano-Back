@@ -70,6 +70,7 @@ public class EntrenadorService {
         entrenador.setTelefono(request.getTelefono());
         entrenador.setEmail(request.getEmail());
         entrenador.setFotoUrl(procesarFoto(request.getFotoBase64(), "entrenador_" + request.getDni()));
+        entrenador.setCertificadoUrl(procesarFoto(request.getCertificadoBase64(), "certificado_" + request.getDni()));
         entrenador.setActivo(request.getActivo());
 
         Entrenador guardado = entrenadorRepository.save(entrenador);
@@ -102,6 +103,10 @@ public class EntrenadorService {
             entrenador.setFotoUrl(procesarFoto(request.getFotoBase64(), "entrenador_" + request.getDni()));
         }
 
+        if (request.getCertificadoBase64() != null && !request.getCertificadoBase64().isBlank()) {
+            entrenador.setCertificadoUrl(procesarFoto(request.getCertificadoBase64(), "certificado_" + request.getDni()));
+        }
+
         Entrenador actualizado = entrenadorRepository.save(entrenador);
         return toResponse(actualizado);
     }
@@ -123,7 +128,8 @@ public class EntrenadorService {
                 entrenador.getId(),
                 entrenador.getNombre(),
                 entrenador.getApellido(),
-                entrenador.getCertificado()
+                entrenador.getCertificado(),
+                fotoStorageService.normalizarFotoParaRespuesta(entrenador.getCertificadoUrl())
         );
     }
 
@@ -157,6 +163,7 @@ public class EntrenadorService {
                 entrenador.getTelefono(),
                 entrenador.getEmail(),
                 fotoStorageService.normalizarFotoParaRespuesta(entrenador.getFotoUrl()),
+                fotoStorageService.normalizarFotoParaRespuesta(entrenador.getCertificadoUrl()),
                 entrenador.getActivo()
         );
     }
