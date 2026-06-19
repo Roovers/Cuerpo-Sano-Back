@@ -38,6 +38,9 @@ public class Entrenador {
     @Column(name = "foto_url", columnDefinition = "TEXT")
     private String fotoUrl;
 
+    @Column(name = "certificado_url", columnDefinition = "TEXT")
+    private String certificadoUrl;
+
     @Column(nullable = false)
     private Boolean activo = true;
 
@@ -74,6 +77,10 @@ public class Entrenador {
 
     public void setFotoUrl(String fotoUrl) {
         this.fotoUrl = fotoUrl;
+    }
+
+    public void setCertificadoUrl(String certificadoUrl) {
+        this.certificadoUrl = certificadoUrl;
     }
 
     public void setActivo(Boolean activo) {
