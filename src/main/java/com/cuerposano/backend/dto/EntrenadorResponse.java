@@ -19,5 +19,6 @@ public class EntrenadorResponse {
     private String telefono;
     private String email;
     private String fotoUrl;
+    private String certificadoUrl;
     private Boolean activo;
 }

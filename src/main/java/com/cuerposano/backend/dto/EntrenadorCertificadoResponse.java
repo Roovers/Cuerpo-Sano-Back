@@ -13,4 +13,5 @@ public class EntrenadorCertificadoResponse {
     private String nombre;
     private String apellido;
     private Boolean certificado;
+    private String certificadoUrl;
 }

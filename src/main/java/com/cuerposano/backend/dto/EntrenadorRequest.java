@@ -27,6 +27,7 @@ public class EntrenadorRequest {
     private String telefono;
     private String email;
     private String fotoBase64;
+    private String certificadoBase64;
 
     @NotNull(message = "El estado activo es obligatorio")
     private Boolean activo;
